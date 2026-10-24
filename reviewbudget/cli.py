@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from reviewbudget import evaluate as ev
-from reviewbudget import h1
+from reviewbudget import h1, smallest
 from reviewbudget.dataset import (
     Dataset,
     build_dataset,
@@ -27,12 +27,17 @@ SUBJECT_WIDTH = 40
 SHOWN_REASONS = 3
 H0_NAME = "H0 (change-only heuristic)"
 H1_NAME = "H1 (history-aware, per line)"
+S_NAME = "S (smallest first)"
 H0_NOTE = (
     "Scores are review priorities estimated from the diff alone, not bug predictions."
 )
 H1_NOTE = (
     "Scores are risk points per 100 changed code lines, from the diff and the "
     "repository's history: review priorities, not bug predictions."
+)
+S_NOTE = (
+    "Scores are lines of program code to review, fewest first, so the budget covers "
+    "the most commits; the reasons are context and do not change the order."
 )
 
 
@@ -173,17 +178,14 @@ def _queue(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         revisions, label = ["-n", str(args.last), "HEAD"], f"last {args.last} on HEAD"
         tip = "HEAD"
 
-    if args.strategy == "h0":
+    if args.strategy in ("h0", "s"):
         commits = load_commits(args.repo, revisions)
         if not commits:
             print(f"No non-merge commits in {label}.")
             return 0
-        ranked = rank([score_commit(c) for c in commits])
-        print(
-            format_queue(
-                ranked, f"Strategy {H0_NAME} · {len(ranked)} commits · {label}"
-            )
-        )
+        name, note, ranked = _diff_only_ranking(args.strategy.upper(), commits)
+        title = f"Strategy {name} · {len(ranked)} commits · {label}"
+        print(format_queue(ranked, title, note))
         return 0
 
     # H1 and the selector need the whole history up to the range, and the bug labels.
@@ -197,21 +199,28 @@ def _queue(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         return 0
     label_set, _ = load_labels(args.repo, use_cache=not args.no_cache)
     details = []
-    use_h1 = args.strategy == "h1"
+    strategy = args.strategy.upper()
     if args.strategy == "auto":
         choice = select(dataset_from_commits(history_commits, label_set))
-        use_h1 = choice.strategy == "H1"
+        strategy = choice.strategy
         details = format_choice(choice)
-    if use_h1:
+    if strategy == "H1":
         history = compute_history(history_commits, label_set.labels)
         ranked = h1.rank([h1.score_commit(c, history[c.sha]) for c in commits])
         name, note = H1_NAME, H1_NOTE
     else:
-        ranked = rank([score_commit(c) for c in commits])
-        name, note = H0_NAME, H0_NOTE
+        name, note, ranked = _diff_only_ranking(strategy, commits)
     title = f"Strategy {name} · {len(ranked)} commits · {label}"
     print(format_queue(ranked, title, note, details))
     return 0
+
+
+def _diff_only_ranking(strategy: str, commits: list) -> tuple[str, str, list]:
+    """Rank with H0 or S, which need only the diffs."""
+    if strategy == "S":
+        ranked = smallest.rank([smallest.score_commit(c) for c in commits])
+        return S_NAME, S_NOTE, ranked
+    return H0_NAME, H0_NOTE, rank([score_commit(c) for c in commits])
 
 
 def _labels(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
@@ -275,9 +284,9 @@ def main(argv: list[str] | None = None) -> int:
     _add_repo_options(queue)
     queue.add_argument(
         "--strategy",
-        choices=["auto", "h0", "h1"],
+        choices=["auto", "h0", "s", "h1"],
         default="auto",
-        help="auto picks H0 or H1 from the repository's bug evidence (default)",
+        help="auto picks H0, S or H1 from the repository's bug evidence (default)",
     )
     selection = queue.add_mutually_exclusive_group(required=True)
     selection.add_argument(

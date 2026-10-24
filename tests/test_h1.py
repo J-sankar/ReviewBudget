@@ -3,7 +3,7 @@ from dataclasses import fields
 import pytest
 from gitfixture import commit, init
 
-from reviewbudget import h1
+from reviewbudget import h1, smallest
 from reviewbudget.cli import main
 from reviewbudget.git_changes import CommitChange, FileChange
 from reviewbudget.history import History, compute_history
@@ -129,21 +129,52 @@ def test_selector_does_not_take_repository_size():
     ],
 )
 def test_selector_tiers(evidence, strategy, eligible):
-    choice = choose(evidence, h0_recall=0.1, h1_recall=0.3)
+    choice = choose(evidence, H1_BEST, H1_BEST)
     assert (choice.strategy, choice.model_eligible) == (strategy, eligible)
     assert choice.reasons[-1].startswith(strategy)
 
 
-def test_selector_falls_back_to_h0_when_h1_does_not_win():
-    choice = choose(Evidence(74, 26, 0.13, 0.8, 0.8), h0_recall=0.2, h1_recall=0.2)
+H1_BEST = {"H0": 0.1, "S": 0.2, "H1": 0.3}
+NO_LABELS = {"H0": None, "S": None, "H1": None}
+RICH = Evidence(74, 26, 0.13, 0.8, 0.8)
+
+
+def test_h1_must_beat_both_simpler_strategies():
+    choice = choose(RICH, {"H0": 0.2, "S": 0.3, "H1": 0.3}, H1_BEST)
+    assert choice.strategy == "S"  # a tie goes to the simpler strategy
+    assert choice.reasons[-1].startswith("S: best on the older commits")
+    assert "H0 20%, S 30%, H1 30%" in choice.reasons[-1]
+
+
+def test_only_the_older_commits_decide():
+    older = {"H0": 0.3, "S": 0.2, "H1": 0.1}
+    newer = {"H0": 0.0, "S": 0.1, "H1": 0.9}
+    choice = choose(RICH, older, newer)
     assert choice.strategy == "H0"
-    assert "did not beat H0" in choice.reasons[-1]
+    assert "check on the newer commits: H0 0%, S 10%, H1 90%" in choice.reasons[-1]
+
+
+def test_no_older_labels_falls_back_to_h0():
+    choice = choose(RICH, NO_LABELS, H1_BEST)
+    assert choice.strategy == "H0"
+    assert "no usable bug labels in the older commits" in choice.reasons[-1]
 
 
 def test_thin_evidence_explains_what_is_missing():
-    choice = choose(Evidence(15, 2, 0.06, 0.5, 0.9), h0_recall=None, h1_recall=None)
+    choice = choose(Evidence(15, 2, 0.06, 0.5, 0.9), NO_LABELS, NO_LABELS)
     assert "only 2 newer labels" in choice.reasons[-1]
     assert "file history coverage 0.50" in choice.reasons[-1]
+
+
+def test_smallest_first_puts_small_code_changes_first_and_no_code_last():
+    docs = CommitChange(
+        "d", "ann", 0, "d", [FileChange("README.md", added_lines=["x"])]
+    )
+    small, large = code_change(2, risky=False), code_change(200, risky=True)
+    ranked = smallest.rank([smallest.score_commit(c) for c in (docs, large, small)])
+    assert [s.lines for s in ranked] == [2, 200, 0]
+    assert ranked[0].reasons[0].text == "2 lines of code to review"
+    assert ranked[-1].reasons[0].text == "no program code changed"
 
 
 @pytest.fixture
@@ -181,6 +212,14 @@ def test_queue_can_force_h1(small_repo, capsys):
     assert "Strategy H1 (history-aware, per line) · 2 commits" in out
     assert "risk points per 100 changed code lines" in out
     assert "author has 2 earlier commits" in out
+
+
+def test_queue_can_force_smallest_first(small_repo, capsys):
+    args = ["queue", "--repo", str(small_repo), "--last", "3", "--strategy", "s"]
+    assert main(args) == 0
+    out = capsys.readouterr().out
+    assert "Strategy S (smallest first) · 3 commits" in out
+    assert "lines of code to review" in out
 
 
 def test_evaluate_prints_the_selection(small_repo, capsys):
