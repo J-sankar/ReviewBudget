@@ -57,7 +57,7 @@ Replace these placeholders with commands that actually work for your project:
 
 ### Current status
 
-- Working features: none yet; planning stage (see [docs/BRIEF.md](docs/BRIEF.md)).
+- Working features: none yet. Phase 0 (feasibility check) is done; see [docs/phase0.md](docs/phase0.md) and [docs/BRIEF.md](docs/BRIEF.md).
 - Known limitations: TODO
 - Libraries, APIs, and public datasets used: TODO — include source links and applicable attribution.
 
