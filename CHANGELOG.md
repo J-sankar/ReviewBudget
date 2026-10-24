@@ -22,6 +22,20 @@ Entry format:
 - Validation: Checked documentation links and ran the repository test and lint checks.
 - Limitations: None identified in these checks.
 
+## 2026-10-25T02:45:00+05:30 — Add local pull-request dashboard
+
+- Changed: Added local GitHub PR URL parsing and remote validation in `reviewbudget/pr.py`, a Streamlit dashboard in `reviewbudget/ui.py`, focused tests, and Streamlit setup instructions.
+- Why: Let reviewers inspect a PR from their existing local checkout without cloning or fetching, with a review budget and risk summary.
+- Validation: `uv run pytest -q tests/test_pr.py` (6 passed); dependency lock updated with `uv lock`.
+- Limitations: The dashboard analyzes tracked working-tree changes against a local base ref, excludes untracked files, and currently uses H0 rather than the full history-aware selector.
+
+## 2026-10-25T03:05:00+05:30 — Analyze PR commits separately
+
+- Changed: The local PR dashboard now ranks each committed change in `base..HEAD` separately and adds pending tracked edits as a distinct `WORKTREE` item; added fixture coverage and updated the usage docs.
+- Why: Prevent the dashboard from collapsing the entire PR into one aggregate diff or double-counting committed changes with working-tree edits.
+- Validation: `uv run pytest -q tests/test_pr.py` (7 passed).
+- Limitations: Untracked files remain excluded and the dashboard still uses H0 for local PR items.
+
 ## 2026-10-25T01:09:48+05:30 — Align README with completed project
 
 - Changed: Replaced the remaining hackathon-template introduction in `README.md` with a ReviewBudget project introduction and corrected the project overview to describe the completed demo.

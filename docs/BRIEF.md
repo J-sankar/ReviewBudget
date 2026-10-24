@@ -107,7 +107,11 @@ A small Streamlit view is a **stretch goal** only. The terminal output (using th
 Repos A and B are chosen in Step 0 from real open-source Python projects. Nothing is hard-coded.
 
 ## 6. Out of scope
-GitHub App or PR comments, web dashboard, function-level ranking, languages other than Python for the risky-construct list (the core works on any language), deep models, a database or any services.
+GitHub App or PR comments, remote repository cloning or fetching, function-level ranking,
+languages other than Python for the risky-construct list (the core works on any language),
+deep models, a database or any services. The local dashboard currently excludes untracked
+files. It uses the H0 diff-only score for each committed PR change and for any separate
+tracked working-tree change set.
 
 ## 7. 15-hour plan (each step follows your working method)
 

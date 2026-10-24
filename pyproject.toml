@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "pydriller>=2.12,<3",
     "scikit-learn>=1.5,<2",
+    "streamlit>=1.40,<2",
 ]
 
 [project.scripts]

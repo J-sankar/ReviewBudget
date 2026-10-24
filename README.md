@@ -55,6 +55,13 @@ rb evaluate --repo <path>                           # score H0, H1, L and baseli
    uv run rb evaluate --repo <path-to-repo>
    ```
    Snapshot datasets are committed in `data/`, made with `rb dataset` from fastapi/typer `a5882ded`, encode/httpx `b5addb64` and httpie/cli `5b604c37`. Clone a repository, check out that commit and rerun `rb dataset` to regenerate one.
+   Analyze a GitHub PR from a local checkout without cloning or fetching:
+   ```bash
+   uv run streamlit run reviewbudget/ui.py
+   ```
+   Paste the PR URL, the local repository path and its local base ref. The dashboard
+   analyzes each committed change in `base..HEAD`, then adds any tracked working-tree
+   edits as a separate `WORKTREE` item. Untracked files are not included.
 5. Run the phase 0 spike on a local clone:
    ```bash
    uv run python spikes/phase0_feasibility.py <path-to-clone> --years 100 --out result.json

@@ -28,6 +28,20 @@ done
 
 Each live command below takes about 8-12 seconds; start the talking point while it runs.
 
+### Analyze a local pull request
+
+The optional dashboard uses the reviewer's existing checkout. It does not clone or fetch.
+Start it with:
+
+```bash
+uv run streamlit run reviewbudget/ui.py
+```
+
+Paste the GitHub PR URL, the local repository path and the local base ref (usually `main`).
+The dashboard validates that a configured local remote matches the PR URL, analyzes each
+committed change in `base..HEAD`, and adds tracked working-tree edits as a separate
+`WORKTREE` item. Untracked files are not included.
+
 ## Script
 
 ### 1. The problem (20 s)
