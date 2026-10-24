@@ -10,6 +10,7 @@ Throwaway research script, not product code. For one repository it reports:
 Usage:
   python spikes/phase0_feasibility.py REPO_PATH [--years 3] [--out results.json] [--sample 10]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -24,14 +25,34 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 REVERT_RE = re.compile(r"This reverts commit ([0-9a-f]{7,40})", re.IGNORECASE)
-FIX_RE = re.compile(r"\b(fix|fixes|fixed|fixing|bug|bugs|bugfix|regression|crash|crashes)\b", re.IGNORECASE)
+FIX_RE = re.compile(
+    r"\b(fix|fixes|fixed|fixing|bug|bugs|bugfix|regression|crash|crashes)\b",
+    re.IGNORECASE,
+)
 NON_BUG_FIX_RE = re.compile(
     r"\b(typos?|docs?|documentation|docstrings?|lint|linting|flake8|mypy|typing|type hints?|"
     r"changelog|readme|ci|style|formatting|pep8|spelling|grammar|links?)\b",
     re.IGNORECASE,
 )
-NON_CODE_DIRS = {"tests", "test", "testing", "docs", "doc", "examples", "example", "benchmarks", "docs_src"}
-NON_CODE_FILES = {"tests.py", "setup.py", "noxfile.py", "conftest.py", "tasks.py", "fabfile.py"}
+NON_CODE_DIRS = {
+    "tests",
+    "test",
+    "testing",
+    "docs",
+    "doc",
+    "examples",
+    "example",
+    "benchmarks",
+    "docs_src",
+}
+NON_CODE_FILES = {
+    "tests.py",
+    "setup.py",
+    "noxfile.py",
+    "conftest.py",
+    "tasks.py",
+    "fabfile.py",
+}
 
 MAX_FIX_FILES = 10
 MAX_CANDIDATE_AGE_DAYS = 730
@@ -53,7 +74,11 @@ class Commit:
 
 def git(repo: Path, *args: str) -> str:
     return subprocess.run(
-        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True, errors="replace"
+        ["git", "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+        errors="replace",
     ).stdout
 
 
@@ -64,13 +89,21 @@ def is_code_file(path: str) -> bool:
     if any(p in NON_CODE_DIRS for p in parts[:-1]):
         return False
     name = parts[-1]
-    return not (name.startswith("test_") or name.endswith("_test.py") or name in NON_CODE_FILES)
+    return not (
+        name.startswith("test_") or name.endswith("_test.py") or name in NON_CODE_FILES
+    )
 
 
 def load_commits(repo: Path) -> list[Commit]:
     """All non-merge commits on HEAD, oldest first."""
-    out = git(repo, "log", "--no-merges", "--reverse", "--name-only",
-              "--format=%x1e%H%x1f%ae%x1f%at%x1f%s%x1f%b%x1f")
+    out = git(
+        repo,
+        "log",
+        "--no-merges",
+        "--reverse",
+        "--name-only",
+        "--format=%x1e%H%x1f%ae%x1f%at%x1f%s%x1f%b%x1f",
+    )
     commits = []
     for rec in out.split("\x1e")[1:]:
         sha, author, ts, subject, body, rest = rec.split("\x1f", 5)
@@ -87,13 +120,17 @@ def is_bug_fix(c: Commit) -> bool:
     return bool(FIX_RE.search(c.subject)) and not NON_BUG_FIX_RE.search(c.subject)
 
 
-def find_reverts(repo: Path, commits: list[Commit], known: set[str]) -> dict[str, list[str]]:
+def find_reverts(
+    repo: Path, commits: list[Commit], known: set[str]
+) -> dict[str, list[str]]:
     """reverted sha -> [reverting shas]"""
     labels: dict[str, list[str]] = {}
     for c in commits:
         for short in REVERT_RE.findall(c.body):
             try:
-                full = git(repo, "rev-parse", "--verify", "--quiet", f"{short}^{{commit}}").strip()
+                full = git(
+                    repo, "rev-parse", "--verify", "--quiet", f"{short}^{{commit}}"
+                ).strip()
             except subprocess.CalledProcessError:
                 continue
             if full in known:
@@ -101,7 +138,9 @@ def find_reverts(repo: Path, commits: list[Commit], known: set[str]) -> dict[str
     return labels
 
 
-def run_szz(repo: Path, fixes: list[Commit], by_sha: dict[str, Commit]) -> tuple[dict[str, list[str]], dict]:
+def run_szz(
+    repo: Path, fixes: list[Commit], by_sha: dict[str, Commit]
+) -> tuple[dict[str, list[str]], dict]:
     """bug-introducing sha -> [fix shas], plus filter stats."""
     from pydriller import Git
 
@@ -109,8 +148,14 @@ def run_szz(repo: Path, fixes: list[Commit], by_sha: dict[str, Commit]) -> tuple
     ignore = repo / ".git-blame-ignore-revs"
     ignore_path = str(ignore) if ignore.exists() else None
     labels: dict[str, list[str]] = {}
-    stats = {"fix_commits": len(fixes), "skipped_too_many_files": 0, "skipped_no_code": 0,
-             "dropped_too_old": 0, "dropped_unknown": 0, "fixes_with_candidates": 0}
+    stats = {
+        "fix_commits": len(fixes),
+        "skipped_too_many_files": 0,
+        "skipped_no_code": 0,
+        "dropped_too_old": 0,
+        "dropped_unknown": 0,
+        "fixes_with_candidates": 0,
+    }
     for fix in fixes:
         if len(fix.files) > MAX_FIX_FILES:
             stats["skipped_too_many_files"] += 1
@@ -120,13 +165,18 @@ def run_szz(repo: Path, fixes: list[Commit], by_sha: dict[str, Commit]) -> tuple
             stats["skipped_no_code"] += 1
             continue
         commit = gr.get_commit(fix.sha)
-        mods = [m for m in commit.modified_files
-                if is_code_file(m.old_path or m.new_path or "") and m.old_path]
+        mods = [
+            m
+            for m in commit.modified_files
+            if is_code_file(m.old_path or m.new_path or "") and m.old_path
+        ]
         if not mods:
             continue
         found = False
         for mod in mods:
-            for shas in gr.get_commits_last_modified_lines(commit, mod, ignore_path).values():
+            for shas in gr.get_commits_last_modified_lines(
+                commit, mod, ignore_path
+            ).values():
                 for sha in shas:
                     cand = by_sha.get(sha)
                     if cand is None:
@@ -193,7 +243,9 @@ def analyse(repo: Path, years: float) -> dict:
             labels[sha] = {"confidence": "high", "reverted_by": by, "fixed_by": []}
     for sha, by in szz.items():
         if sha in window_shas:
-            entry = labels.setdefault(sha, {"confidence": "medium", "reverted_by": [], "fixed_by": []})
+            entry = labels.setdefault(
+                sha, {"confidence": "medium", "reverted_by": [], "fixed_by": []}
+            )
             entry["fixed_by"] = by
 
     split = int(len(code_window) * TRAIN_SHARE)
@@ -201,10 +253,16 @@ def analyse(repo: Path, years: float) -> dict:
     test = {c.sha for c in code_window[split:]}
 
     def count(shas: set[str], conf: str | None = None) -> int:
-        return sum(1 for s, v in labels.items() if s in shas and (conf is None or v["confidence"] == conf))
+        return sum(
+            1
+            for s, v in labels.items()
+            if s in shas and (conf is None or v["confidence"] == conf)
+        )
 
     fix_delays = [
-        (by_sha[f].ts - by_sha[s].ts) / DAY for s, v in labels.items() for f in v["fixed_by"]
+        (by_sha[f].ts - by_sha[s].ts) / DAY
+        for s, v in labels.items()
+        for f in v["fixed_by"]
     ]
     authors = {c.author for c in window}
     summary = {
@@ -221,19 +279,36 @@ def analyse(repo: Path, years: float) -> dict:
         "revert_labels": count(window_shas, "high"),
         "szz_labels": count(window_shas, "medium"),
         "labelled_code_commits": count({c.sha for c in code_window}),
-        "positive_rate": round(count({c.sha for c in code_window}) / len(code_window), 3) if code_window else 0.0,
+        "positive_rate": round(
+            count({c.sha for c in code_window}) / len(code_window), 3
+        )
+        if code_window
+        else 0.0,
         "train_commits": len(train),
         "test_commits": len(test),
         "train_labels": count(train),
         "test_labels": count(test),
         "train_positive_rate": round(count(train) / len(train), 3) if train else 0.0,
         "test_positive_rate": round(count(test) / len(test), 3) if test else 0.0,
-        "median_days_to_fix": round(statistics.median(fix_delays), 1) if fix_delays else None,
+        "median_days_to_fix": round(statistics.median(fix_delays), 1)
+        if fix_delays
+        else None,
         "szz_filters": szz_stats,
-        "seconds": {"log": round(t_log, 1), "reverts": round(t_rev, 1), "szz": round(t_szz, 1)},
+        "seconds": {
+            "log": round(t_log, 1),
+            "reverts": round(t_rev, 1),
+            "szz": round(t_szz, 1),
+        },
     }
-    return {"summary": summary, "labels": labels,
-            "subjects": {s: by_sha[s].subject for s in set(labels) | {f for v in labels.values() for f in v["fixed_by"] + v["reverted_by"]}}}
+    return {
+        "summary": summary,
+        "labels": labels,
+        "subjects": {
+            s: by_sha[s].subject
+            for s in set(labels)
+            | {f for v in labels.values() for f in v["fixed_by"] + v["reverted_by"]}
+        },
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -241,7 +316,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("repo", type=Path)
     ap.add_argument("--years", type=float, default=3.0)
     ap.add_argument("--out", type=Path)
-    ap.add_argument("--sample", type=int, default=0, help="print N random SZZ labels for hand-checking")
+    ap.add_argument(
+        "--sample",
+        type=int,
+        default=0,
+        help="print N random SZZ labels for hand-checking",
+    )
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args(argv)
 
@@ -256,7 +336,9 @@ def main(argv: list[str] | None = None) -> int:
         rng = random.Random(args.seed)
         for sha in rng.sample(szz, min(args.sample, len(szz))):
             fix = result["labels"][sha]["fixed_by"][0]
-            print(f"\nBUG {sha[:10]} {result['subjects'][sha]}\nFIX {fix[:10]} {result['subjects'][fix]}")
+            print(
+                f"\nBUG {sha[:10]} {result['subjects'][sha]}\nFIX {fix[:10]} {result['subjects'][fix]}"
+            )
     return 0
 
 

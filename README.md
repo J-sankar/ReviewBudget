@@ -47,18 +47,25 @@ rb queue   --repo . --range main..feature --budget 30m [--export plan.md]
 
 ### Run the project
 
-Replace these placeholders with commands that actually work for your project:
-
-1. Prerequisites and versions: TODO
-2. Dependency installation: TODO
-3. Environment setup: TODO — list required variable names and provide a sanitized `.env.example` if needed.
-4. Start the project: TODO
-5. Run checks or tests: TODO
+1. Prerequisites: Git, Python 3.12 and [uv](https://docs.astral.sh/uv/).
+2. Install dependencies (creates `.venv` from `uv.lock`): `uv sync`
+3. Environment setup: none; no environment variables or credentials are needed.
+4. Run the phase 0 spike on a local clone (the product CLI is not built yet):
+   ```bash
+   uv run python spikes/phase0_feasibility.py <path-to-clone> --years 100 --out result.json
+   uv run python spikes/phase0_table.py <dir-of-result-json>
+   ```
+5. Run checks and tests:
+   ```bash
+   uv run pytest -q
+   uv run ruff check .
+   uv run ruff format --check .
+   ```
 
 ### Current status
 
 - Working features: none yet. Phase 0 (feasibility check) is done; see [docs/phase0.md](docs/phase0.md) and [docs/BRIEF.md](docs/BRIEF.md).
 - Known limitations: TODO
-- Libraries, APIs, and public datasets used: TODO — include source links and applicable attribution.
+- Libraries, APIs, and public datasets used: [PyDriller](https://github.com/ishepard/pydriller) (Apache-2.0) for Git history and SZZ; [pytest](https://pytest.org) and [ruff](https://docs.astral.sh/ruff/) for checks. Phase 0 analysed public GitHub repositories listed in [docs/phase0.md](docs/phase0.md).
 
 See [AI_USAGE.md](AI_USAGE.md) for AI assistance and [CHANGELOG.md](CHANGELOG.md) for the development record.

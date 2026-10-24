@@ -15,6 +15,13 @@ Entry format:
 - Limitations: <known issues or "None identified in these checks">
 ```
 
+## 2026-10-24T21:49:35+05:30 — uv environment and lint clean-up
+
+- Changed: Added `pyproject.toml`, `uv.lock` and `.python-version` (Python 3.12; `pydriller>=2.12,<3`; dev group `pytest`, `ruff`). Fixed the ruff findings in `spikes/phase0_table.py` and `tests/test_phase0_spike.py` and applied `ruff format` to `spikes/` and `tests/`. Added setup, run and check commands to `README.md`.
+- Why: One reproducible environment for the repository instead of system-wide installs.
+- Validation: `uv sync --locked` succeeded; `uv run pytest -q` (5 passed); `uv run ruff check .` (all checks passed); `uv run ruff format --check .` (clean). Ran the spike and table scripts on a fresh httpie/cli clone: same row as `docs/phase0.md`, and the spike's JSON output was identical before and after formatting (timings excluded).
+- Limitations: No behavior change; the product CLI does not exist yet.
+
 ## 2026-10-24T21:40:18+05:30 — Phase 0 results table script
 
 - Changed: Added `spikes/phase0_table.py`, which turns a directory of spike JSON results into the Markdown table in `docs/phase0.md` and applies the draft selector thresholds to show each repository's tier. Added it to the reproduce steps in `docs/phase0.md`.

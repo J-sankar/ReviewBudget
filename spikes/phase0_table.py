@@ -19,7 +19,11 @@ H1_MIN_COVERAGE = 0.6
 
 def draft_tier(s: dict) -> str:
     low, high = L_POSITIVE_RATE
-    if s["train_labels"] >= L_MIN_TRAIN and s["test_labels"] >= L_MIN_TEST and low <= s["positive_rate"] <= high:
+    if (
+        s["train_labels"] >= L_MIN_TRAIN
+        and s["test_labels"] >= L_MIN_TEST
+        and low <= s["positive_rate"] <= high
+    ):
         return "L eligible"
     coverage = min(s["file_history_coverage"], s["author_history_coverage"])
     if s["test_labels"] >= H1_MIN_TEST and coverage >= H1_MIN_COVERAGE:
@@ -29,8 +33,10 @@ def draft_tier(s: dict) -> str:
 
 def table(results_dir: Path) -> str:
     rows = [
-        "| Repo | Commits | Code commits | Authors | File cov. | Author cov. | Revert | SZZ "
-        "| Positive rate | Train labels | Test labels | SZZ time (s) | Draft tier |",
+        (
+            "| Repo | Commits | Code commits | Authors | File cov. | Author cov. | Revert | SZZ "
+            "| Positive rate | Train labels | Test labels | SZZ time (s) | Draft tier |"
+        ),
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for path in sorted(results_dir.glob("*.json")):
