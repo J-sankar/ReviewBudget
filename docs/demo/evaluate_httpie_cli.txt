@@ -1,0 +1,40 @@
+Evaluation for <clone>/httpie_cli at 5b604c37
+Code commits: 720 · train 503 (before 2020-04-18) · test 217 (from 2020-04-18)
+Bug labels: train 71 (evidence found before the split) · test 26 (12% of test commits)
+Labels are noisy evidence, and the newest commits have had less time for their bugs to be found.
+
+strategy                      bugs found in 20% effort  precision, top 10
+H0 (change-only heuristic)                          4%                30%
+H1 (history-aware, per line)                       50%                10%
+largest first                                       0%                50%
+smallest first                                     50%                10%
+L (learned, per line)                              42%                 0%
+random order (100 runs)                            21%                14%
+Bugs found in 20% effort: review in ranked order and stop at 20% of the window's changed code lines.
+
+What L learned from 71 bug labels in 503 older commits (weight per signal, inputs scaled):
+  +1.24  lines of code changed
+  -1.21  earlier bug-linked commits in the files
+  +0.51  earlier changes to the files
+  +0.43  code files changed
+  -0.25  no test changed
+  -0.24  security-sensitive code changed
+  +0.21  folders touched
+  +0.16  error handling changed
+  +0.10  author's earlier commits
+  +0.03  concurrency code changed
+  +0.02  author new to these files
+
+Same strategies on the older (training) commits, for comparison (L left out: it learned from them):
+strategy                      bugs found in 20% effort  precision, top 10
+H0 (change-only heuristic)                          6%                50%
+H1 (history-aware, per line)                       42%                 0%
+largest first                                       1%                70%
+smallest first                                     46%                 0%
+random order (100 runs)                            20%                13%
+
+Strategy selection:
+  - bug labels: 71 older, 26 newer; 14% of code commits labelled
+  - history coverage of newer commits: files 0.95, authors 0.83
+  - learning model eligible (at least 50 older and 20 newer labels, 3%-30% labelled), so L competes
+  - H1: best on the newest 30% of the older commits, after L learned from the rest (bugs found in 20% effort: H0 0%, S 36%, H1 43%, L 43%); check on the newer commits: H0 4%, S 50%, H1 50%, L 42%

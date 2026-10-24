@@ -1,0 +1,19 @@
+Evaluation for <clone>/fastapi_typer at a5882ded
+Code commits: 270 · train 189 (before 2025-09-20) · test 81 (from 2025-09-20)
+Bug labels: train 15 (evidence found before the split) · test 2 (2% of test commits)
+Labels are noisy evidence, and the newest commits have had less time for their bugs to be found.
+
+Too few test labels to measure rankings (2; need at least 10).
+
+Same strategies on the older (training) commits, for comparison:
+strategy                      bugs found in 20% effort  precision, top 10
+H0 (change-only heuristic)                          7%                10%
+H1 (history-aware, per line)                       47%                 0%
+largest first                                       0%                50%
+smallest first                                     53%                 0%
+random order (100 runs)                            20%                 7%
+
+Strategy selection:
+  - bug labels: 15 older, 2 newer; 7% of code commits labelled
+  - history coverage of newer commits: files 0.91, authors 0.85
+  - H0: only 2 newer labels to check other strategies against (need 10)

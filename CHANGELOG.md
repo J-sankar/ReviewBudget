@@ -15,6 +15,20 @@ Entry format:
 - Limitations: <known issues or "None identified in these checks">
 ```
 
+## 2026-10-25T01:09:48+05:30 — Align README with completed project
+
+- Changed: Replaced the remaining hackathon-template introduction in `README.md` with a ReviewBudget project introduction and corrected the project overview to describe the completed demo.
+- Why: The README was inconsistent with the completed demo, submission details and implementation status.
+- Validation: Read all repository Markdown files and checked the README links and CLI descriptions against `docs/DEMO.md`, `SUBMISSION.md` and the existing verified demo record.
+- Limitations: Documentation-only change; organizer-specific submission checklist items remain intentionally open.
+
+## 2026-10-25T00:12:52+05:30 — Demo script and submission details
+
+- Changed: Added `docs/DEMO.md` (3-minute demo script: setup with clones pinned to the `data/` source commits, exact commands, talking points and a fallback) and `docs/demo/` (saved outputs of `rb evaluate` on typer, httpx and httpie, the 15-minute `rb queue` plan on httpie and its Markdown export; local paths replaced with `<clone>/`). Filled in `SUBMISSION.md` (description, final implementation commit `1b374a2`, demo steps, checks, limitations, libraries and analysed repositories with licences); checklist items needing the organizers' instructions are left unticked. `README.md` gains a Demo section, lists scikit-learn and the demo repositories' licences, and drops stale limitation sentences.
+- Why: The submission needs a reproducible working demo and accurate project details.
+- Validation: Every demo command run on fresh clones at the pinned commits with an empty label cache: selections H0 (typer), S (httpx) and H1 (httpie) and the httpie plan (5 of 30 commits in 12 min) match the documented numbers; `rb evaluate` took 11-12 s cold, `rb queue` 9 s. `uv run pytest -q` (109 passed); ruff check/format clean; links to `docs/demo/` files checked.
+- Limitations: Documentation only. The organizers' eligibility, participation-format and submission-method items must be confirmed by the participant.
+
 ## 2026-10-24T23:51:43+05:30 — Phase 6: review time budget, riskiest list and Markdown export
 
 - Changed: Added `reviewbudget/budget.py`: parses budgets (`15m`, `90m`, `1h`, `1h30m`; malformed or non-positive values are rejected), estimates minutes per commit from changed code lines at a review speed (default 300 lines an hour, at least 1 minute), fills the budget in the selected strategy's order and stops at the first commit that does not fit (the same rule as the effort-aware measure), gives every skipped commit a reason, lists H0's five riskiest code changes with whether each is in the plan or larger than the whole budget, and renders the plan for the terminal and as Markdown. `rb queue` gains `--budget`, `--speed` and `--export` (which needs `--budget`). H0's docs/tests-only, config-only, rename-only and whitespace-only reasons now carry a `low_value` key (scores unchanged). Added `tests/test_budget.py`; updated `README.md`.

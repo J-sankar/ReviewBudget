@@ -1,0 +1,25 @@
+Evaluation for <clone>/encode_httpx at b5addb64
+Code commits: 846 · train 592 (before 2020-11-24) · test 254 (from 2020-11-24)
+Bug labels: train 40 (evidence found before the split) · test 18 (7% of test commits)
+Labels are noisy evidence, and the newest commits have had less time for their bugs to be found.
+
+strategy                      bugs found in 20% effort  precision, top 10
+H0 (change-only heuristic)                          6%                40%
+H1 (history-aware, per line)                       44%                 0%
+largest first                                       6%                50%
+smallest first                                     44%                 0%
+random order (100 runs)                            20%                 7%
+Bugs found in 20% effort: review in ranked order and stop at 20% of the window's changed code lines.
+
+Same strategies on the older (training) commits, for comparison:
+strategy                      bugs found in 20% effort  precision, top 10
+H0 (change-only heuristic)                         10%                30%
+H1 (history-aware, per line)                       32%                 0%
+largest first                                      10%                50%
+smallest first                                     38%                 0%
+random order (100 runs)                            20%                 7%
+
+Strategy selection:
+  - bug labels: 40 older, 18 newer; 7% of code commits labelled
+  - history coverage of newer commits: files 0.97, authors 0.60
+  - S: best on the older commits (bugs found in 20% effort: H0 10%, S 38%, H1 32%); check on the newer commits: H0 6%, S 44%, H1 44%
