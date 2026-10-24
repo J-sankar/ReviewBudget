@@ -70,7 +70,7 @@ RISK_PATTERNS = {
 class Reason:
     points: float
     text: str
-    key: str = ""  # "size" marks the size points, which H1 leaves out
+    key: str = ""  # names the signal; "size" marks the size points, which H1 leaves out
 
 
 @dataclass
@@ -180,13 +180,17 @@ def score_commit(commit: CommitChange) -> ScoredCommit:
             {m.group(0).lower() for line in text for m in pattern.finditer(line)}
         )
         if hits:
-            reasons.append(Reason(w[key], f"{label} ({', '.join(hits[:3])})"))
+            reasons.append(Reason(w[key], f"{label} ({', '.join(hits[:3])})", key))
 
     if tests_changed:
         reasons.append(Reason(0.0, "tests updated"))
     else:
         reasons.append(
-            Reason(w["no_test_change"], "code changed without a test change")
+            Reason(
+                w["no_test_change"],
+                "code changed without a test change",
+                "no_test_change",
+            )
         )
     return _scored(commit, reasons)
 

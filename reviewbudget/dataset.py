@@ -8,7 +8,7 @@ before the split, so nothing is learned from bugs that were discovered later.
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -17,6 +17,7 @@ from reviewbudget.git_changes import CommitChange, load_commits
 from reviewbudget.h0 import ScoredCommit, code_lines, file_kind, score_commit
 from reviewbudget.history import compute_history
 from reviewbudget.labels import Label, LabelSet, load_labels
+from reviewbudget.model import FEATURES, commit_features
 
 TRAIN_SHARE = 0.7
 CSV_COLUMNS = [
@@ -39,6 +40,7 @@ CSV_COLUMNS = [
     "file_changes_before",
     "file_bugs_before",
     "author_commits_before",
+    *(f"feature_{name}" for name in FEATURES),
 ]
 
 
@@ -65,6 +67,7 @@ class Row:
     file_changes_before: int = 0
     file_bugs_before: int = 0
     author_commits_before: int = 0
+    features: dict[str, float] = field(default_factory=dict)  # inputs for model L
 
 
 @dataclass
@@ -140,6 +143,7 @@ def make_rows(
                 file_changes_before=past.file_changes,
                 file_bugs_before=past.file_bugs,
                 author_commits_before=past.author_commits,
+                features=commit_features(c, past, s),
             )
         )
     return rows, split_time
@@ -184,5 +188,6 @@ def write_csv(dataset: Dataset, path: Path) -> None:
                     r.file_changes_before,
                     r.file_bugs_before,
                     r.author_commits_before,
+                    *(r.features.get(name, "") for name in FEATURES),
                 ]
             )

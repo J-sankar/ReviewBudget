@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from reviewbudget import evaluate as ev
-from reviewbudget import h1, smallest
+from reviewbudget import h1, model, smallest
 from reviewbudget.dataset import (
     Dataset,
     build_dataset,
@@ -28,12 +29,17 @@ SHOWN_REASONS = 3
 H0_NAME = "H0 (change-only heuristic)"
 H1_NAME = "H1 (history-aware, per line)"
 S_NAME = "S (smallest first)"
+L_NAME = model.NAME
 H0_NOTE = (
     "Scores are review priorities estimated from the diff alone, not bug predictions."
 )
 H1_NOTE = (
     "Scores are risk points per 100 changed code lines, from the diff and the "
     "repository's history: review priorities, not bug predictions."
+)
+L_NOTE = (
+    "Scores are the learned bug likelihood (%) per 100 changed code lines, from this "
+    "repository's noisy labels; reasons are the signals that raised it most."
 )
 S_NOTE = (
     "Scores are lines of program code to review, fewest first, so the budget covers "
@@ -135,6 +141,7 @@ def format_evaluation(
     title: str,
     train_results: list[ev.Result] | None = None,
     choice: Choice | None = None,
+    learned: model.Model | None = None,
 ) -> str:
     lines = [title, *_split_summary(dataset)]
     lines.append(
@@ -155,10 +162,20 @@ def format_evaluation(
             f"Bugs found in {ev.EFFORT_SHARE:.0%} effort: review in ranked order and "
             f"stop at {ev.EFFORT_SHARE:.0%} of the window's changed code lines."
         )
+    if learned is not None:
+        lines += [
+            "",
+            (
+                f"What L learned from {learned.labels} bug labels in {learned.rows} "
+                "older commits (weight per signal, inputs scaled):"
+            ),
+            *(f"  {w:+.2f}  {model.FEATURES[name]}" for name, w in learned.weights()),
+        ]
     if train_results is not None:
         lines += [
             "",
-            "Same strategies on the older (training) commits, for comparison:",
+            "Same strategies on the older (training) commits, for comparison"
+            + (" (L left out: it learned from them):" if learned else ":"),
             *_results_table(train_results),
         ]
     if choice is not None:
@@ -198,14 +215,27 @@ def _queue(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         print(f"No non-merge commits in {label}.")
         return 0
     label_set, _ = load_labels(args.repo, use_cache=not args.no_cache)
+    dataset = dataset_from_commits(history_commits, label_set)
     details = []
     strategy = args.strategy.upper()
     if args.strategy == "auto":
-        choice = select(dataset_from_commits(history_commits, label_set))
+        choice = select(dataset)
         strategy = choice.strategy
         details = format_choice(choice)
-    if strategy == "H1":
-        history = compute_history(history_commits, label_set.labels)
+    history = compute_history(history_commits, label_set.labels)
+    if strategy == "L":
+        # Ranking new work, so L learns from every label known now.
+        everything = [replace(r, buggy=int(bool(r.label_source))) for r in dataset.rows]
+        learned = model.train(everything)
+        if learned is None:
+            print("No bug labels to learn from in this history; try --strategy auto.")
+            return 1
+        details.append(
+            f"L learned from {learned.labels} bug labels in {learned.rows} code commits."
+        )
+        ranked = model.rank(model.score_commits(learned, commits, history))
+        name, note = L_NAME, L_NOTE
+    elif strategy == "H1":
         ranked = h1.rank([h1.score_commit(c, history[c.sha]) for c in commits])
         name, note = H1_NAME, H1_NOTE
     else:
@@ -253,13 +283,16 @@ def _evaluate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         print("No commits that change program code; nothing to evaluate.")
         return 0
     title = f"Evaluation for {args.repo} at {dataset.head[:8]}"
+    choice = select(dataset)
+    learned = model.train(dataset.train) if choice.model_eligible else None
     print(
         format_evaluation(
             dataset,
-            ev.evaluate(dataset),
+            ev.evaluate(dataset, learned=learned),
             title,
             train_results=ev.evaluate(dataset, "train"),
-            choice=select(dataset),
+            choice=choice,
+            learned=learned,
         )
     )
     return 0
@@ -284,9 +317,9 @@ def main(argv: list[str] | None = None) -> int:
     _add_repo_options(queue)
     queue.add_argument(
         "--strategy",
-        choices=["auto", "h0", "s", "h1"],
+        choices=["auto", "h0", "s", "h1", "l"],
         default="auto",
-        help="auto picks H0, S or H1 from the repository's bug evidence (default)",
+        help="auto picks H0, S, H1 or L from the repository's bug evidence (default)",
     )
     selection = queue.add_mutually_exclusive_group(required=True)
     selection.add_argument(

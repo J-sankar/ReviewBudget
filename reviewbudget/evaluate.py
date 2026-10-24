@@ -9,6 +9,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
+from reviewbudget import model
 from reviewbudget.dataset import Dataset, Row, count_buggy
 
 EFFORT_SHARE = 0.2
@@ -89,8 +90,13 @@ def random_baseline(
     )
 
 
-def evaluate(dataset: Dataset, window: str = "test") -> list[Result] | None:
-    """Results for each strategy on one window, or None if it has too few labels."""
+def evaluate(
+    dataset: Dataset, window: str = "test", learned: model.Model | None = None
+) -> list[Result] | None:
+    """Results for each strategy on one window, or None if it has too few labels.
+
+    The learned model is only scored when given; pass one trained on older rows.
+    """
     rows = dataset.test if window == "test" else dataset.train
     if count_buggy(rows) < max(1, MIN_TEST_LABELS):
         return None
@@ -98,5 +104,10 @@ def evaluate(dataset: Dataset, window: str = "test") -> list[Result] | None:
     for name, order in STRATEGIES.items():
         ranked = order(rows)
         results.append(Result(name, recall_at_effort(ranked), precision_at_k(ranked)))
+    if learned is not None:
+        ranked = model.order(learned, rows)
+        results.append(
+            Result(model.NAME, recall_at_effort(ranked), precision_at_k(ranked))
+        )
     results.append(random_baseline(rows))
     return results
