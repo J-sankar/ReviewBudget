@@ -1,19 +1,33 @@
-__pycache__/
-*.py[cod]
-*.egg-info/
-.eggs/
-build/
+# Local secrets; sanitized example files may be committed.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+
+# Common dependencies, build output, caches, and local tooling.
+node_modules/
+.next/
 dist/
+build/
+coverage/
 .venv/
 venv/
-.env
+__pycache__/
+*.py[cod]
 .pytest_cache/
+.DS_Store
+Thumbs.db
+*.log
+
+# Python and editor extras for ReviewBudget.
+*.egg-info/
+.eggs/
 .mypy_cache/
 .ruff_cache/
 .coverage
 htmlcov/
 .cache/
-*.log
-.DS_Store
 .idea/
 .vscode/
