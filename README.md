@@ -34,6 +34,8 @@ Implemented CLI (phases 1 and 2):
 rb queue --repo <path> --range A..B     # rank the non-merge commits in a range
 rb queue --repo <path> --last N         # rank the last N commits on HEAD
 rb labels --repo <path> [--sample N] [--no-cache]   # bug labels found in the history
+rb dataset --repo <path> --out data.csv             # one row per code commit: H0 score, label, train/test window
+rb evaluate --repo <path>                           # score H0 and baselines on the newer 30% of commits
 ```
 
 Planned CLI (not implemented yet):
@@ -59,6 +61,12 @@ rb queue   --repo . --range main..feature --budget 30m [--export plan.md]
    ```bash
    uv run rb labels --repo <path-to-repo> --sample 10
    ```
+   Export the dataset for inspection, and score H0 against the labels on the newer commits:
+   ```bash
+   uv run rb dataset --repo <path-to-repo> --out data.csv
+   uv run rb evaluate --repo <path-to-repo>
+   ```
+   Snapshot datasets are committed in `data/`, made with `rb dataset` from fastapi/typer `a5882ded`, encode/httpx `b5addb64` and httpie/cli `5b604c37`. Clone a repository, check out that commit and rerun `rb dataset` to regenerate one.
 5. Run the phase 0 spike on a local clone:
    ```bash
    uv run python spikes/phase0_feasibility.py <path-to-clone> --years 100 --out result.json
@@ -73,8 +81,8 @@ rb queue   --repo . --range main..feature --budget 30m [--export plan.md]
 
 ### Current status
 
-- Working features: phase 0 (feasibility check, see [docs/phase0.md](docs/phase0.md)); phase 1 `rb queue` with the H0 change-only heuristic. H0 scores each commit from its diff alone: code size (log scale, capped), files and folders touched, error-handling / security / concurrency keywords in changed lines, and whether tests changed. Docs-only, test-only, pure-rename and whitespace-only changes score near zero. Commit messages are never used for scoring. Phase 2 `rb labels` finds bug labels in the full history: reverted commits (high confidence) and SZZ suspects traced back from bug-fix commits (medium confidence), with the phase 0 noise filters. Each label records its evidence and the date that evidence appeared.
-- Known limitations: Bug-fix commits are found by keywords in the commit subject, and SZZ labels are noisy (about 50-65% looked plausible in the phase 0 hand check), so labels are evidence, not ground truth. H0 weights are hand-set and not yet validated against bug labels (phase 3). The risk signals are keyword matches, so they can fire on unrelated words or miss real risk. Mechanical changes spread across many files (for example a project rename) can still rank high. History signals, the strategy selector and the time budget are not built yet.
+- Working features: phase 0 (feasibility check, see [docs/phase0.md](docs/phase0.md)); phase 1 `rb queue` with the H0 change-only heuristic. H0 scores each commit from its diff alone: code size (log scale, capped), files and folders touched, error-handling / security / concurrency keywords in changed lines, and whether tests changed. Docs-only, test-only, pure-rename and whitespace-only changes score near zero. Commit messages are never used for scoring. Phase 2 `rb labels` finds bug labels in the full history: reverted commits (high confidence) and SZZ suspects traced back from bug-fix commits (medium confidence), with the phase 0 noise filters. Each label records its evidence and the date that evidence appeared. Phase 3 `rb dataset` and `rb evaluate` split the code commits by time (older 70% train, newer 30% test; a training bug only counts if its evidence appeared before the split) and measure the share of buggy test commits found within 20% of the review effort (changed code lines), plus precision in the top 10, for H0 against largest-first, smallest-first and random baselines. First results: H0 currently finds fewer bugs per line reviewed than random order (httpx 6% vs 20%, httpie 4% vs 21%), because its size points push large commits to the top; it does beat random on top-10 precision.
+- Known limitations: H0 does worse than random order on the effort-aware measure (see above). The newest test commits have had less time for their bugs to be found. Bug-fix commits are found by keywords in the commit subject, and SZZ labels are noisy (about 50-65% looked plausible in the phase 0 hand check), so labels are evidence, not ground truth. H0 weights are hand-set and not yet validated against bug labels (phase 3). The risk signals are keyword matches, so they can fire on unrelated words or miss real risk. Mechanical changes spread across many files (for example a project rename) can still rank high. History signals, the strategy selector and the time budget are not built yet.
 - Libraries, APIs, and public datasets used: [PyDriller](https://github.com/ishepard/pydriller) (Apache-2.0) for Git history and SZZ; [pytest](https://pytest.org) and [ruff](https://docs.astral.sh/ruff/) for checks. Phase 0 analysed public GitHub repositories listed in [docs/phase0.md](docs/phase0.md).
 
 See [AI_USAGE.md](AI_USAGE.md) for AI assistance and [CHANGELOG.md](CHANGELOG.md) for the development record.

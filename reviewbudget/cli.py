@@ -1,4 +1,4 @@
-"""Command-line interface: `rb queue` and `rb labels`."""
+"""Command-line interface: `rb queue`, `rb labels`, `rb dataset` and `rb evaluate`."""
 
 from __future__ import annotations
 
@@ -7,6 +7,14 @@ import sys
 import time
 from pathlib import Path
 
+from reviewbudget import evaluate as ev
+from reviewbudget.dataset import (
+    Dataset,
+    build_dataset,
+    count_buggy,
+    iso_date,
+    write_csv,
+)
 from reviewbudget.git_changes import GitError, load_commits
 from reviewbudget.h0 import ScoredCommit, rank, score_commit
 from reviewbudget.labels import LabelSet, load_labels
@@ -68,6 +76,53 @@ def format_labels(label_set: LabelSet, title: str, sample: int) -> str:
     return "\n".join(lines)
 
 
+def _split_summary(dataset: Dataset) -> list[str]:
+    train, test = dataset.train, dataset.test
+    split = iso_date(dataset.split_time)
+    rate = count_buggy(test) / len(test) if test else 0.0
+    return [
+        (
+            f"Code commits: {len(dataset.rows)} · train {len(train)} (before {split}) · "
+            f"test {len(test)} (from {split})"
+        ),
+        (
+            f"Bug labels: train {count_buggy(train)} (evidence found before the split) · "
+            f"test {count_buggy(test)} ({rate:.0%} of test commits)"
+        ),
+    ]
+
+
+def format_evaluation(
+    dataset: Dataset, results: list[ev.Result] | None, title: str
+) -> str:
+    lines = [title, *_split_summary(dataset)]
+    lines.append(
+        "Labels are noisy evidence, and the newest commits have had less time "
+        "for their bugs to be found."
+    )
+    if results is None:
+        lines += [
+            "",
+            (
+                f"Too few test labels to measure rankings ({count_buggy(dataset.test)}; "
+                f"need at least {ev.MIN_TEST_LABELS})."
+            ),
+        ]
+        return "\n".join(lines)
+    effort_header = f"bugs found in {ev.EFFORT_SHARE:.0%} effort"
+    top_header = f"precision, top {ev.TOP_K}"
+    lines += ["", f"{'strategy':28}  {effort_header:>24}  {top_header:>17}"]
+    for r in results:
+        lines.append(
+            f"{r.name:28}  {r.recall_at_effort:>24.0%}  {r.precision_at_k:>17.0%}"
+        )
+    lines.append(
+        f"Bugs found in {ev.EFFORT_SHARE:.0%} effort: review in ranked order and stop at "
+        f"{ev.EFFORT_SHARE:.0%} of the test window's changed code lines."
+    )
+    return "\n".join(lines)
+
+
 def _queue(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     if args.last is not None and args.last < 1:
         parser.error("--last must be at least 1")
@@ -101,6 +156,36 @@ def _labels(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     return 0
 
 
+def _dataset(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    dataset = build_dataset(args.repo, use_cache=not args.no_cache)
+    write_csv(dataset, args.out)
+    train, test = dataset.train, dataset.test
+    print(
+        f"Wrote {len(dataset.rows)} rows to {args.out} (train {len(train)}, test {len(test)}; "
+        f"bug labels: train {count_buggy(train)}, test {count_buggy(test)})."
+    )
+    return 0
+
+
+def _evaluate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    dataset = build_dataset(args.repo, use_cache=not args.no_cache)
+    if not dataset.rows:
+        print("No commits that change program code; nothing to evaluate.")
+        return 0
+    title = f"Evaluation for {args.repo} at {dataset.head[:8]}"
+    print(format_evaluation(dataset, ev.evaluate(dataset), title))
+    return 0
+
+
+def _add_repo_options(command: argparse.ArgumentParser) -> None:
+    command.add_argument(
+        "--repo", type=Path, default=Path("."), help="local git repository"
+    )
+    command.add_argument(
+        "--no-cache", action="store_true", help="recompute the bug labels"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="rb", description="ReviewBudget: rank commits for review."
@@ -125,21 +210,29 @@ def main(argv: list[str] | None = None) -> int:
     labels = commands.add_parser(
         "labels", help="find bug labels (reverts and SZZ) in history"
     )
-    labels.add_argument(
-        "--repo", type=Path, default=Path("."), help="local git repository"
-    )
+    _add_repo_options(labels)
     labels.add_argument(
         "--sample", type=int, default=10, metavar="N", help="labels to show"
     )
-    labels.add_argument(
-        "--no-cache", action="store_true", help="recompute and refresh the cache"
-    )
     labels.set_defaults(handler=_labels, parser=labels)
+
+    dataset = commands.add_parser(
+        "dataset", help="write one row per code commit to a CSV file"
+    )
+    _add_repo_options(dataset)
+    dataset.add_argument("--out", type=Path, required=True, help="CSV file to write")
+    dataset.set_defaults(handler=_dataset, parser=dataset)
+
+    evaluate = commands.add_parser(
+        "evaluate", help="score H0 and baselines on newer commits"
+    )
+    _add_repo_options(evaluate)
+    evaluate.set_defaults(handler=_evaluate, parser=evaluate)
 
     args = parser.parse_args(argv)
     try:
         return args.handler(args, args.parser)
-    except GitError as error:
+    except (GitError, OSError) as error:
         print(f"rb: error: {error}", file=sys.stderr)
         return 2
 

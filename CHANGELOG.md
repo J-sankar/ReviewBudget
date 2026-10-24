@@ -15,6 +15,13 @@ Entry format:
 - Limitations: <known issues or "None identified in these checks">
 ```
 
+## 2026-10-24T22:39:24+05:30 — Phase 3: dataset, time split and evaluation
+
+- Changed: Added `reviewbudget/dataset.py` (one row per code commit with its H0 score and label; older 70% train, newer 30% test; a training row only counts as buggy if its evidence appeared before the split; CSV export) and `reviewbudget/evaluate.py` (share of buggy test commits found within 20% of the changed code lines, precision in the top 10, and largest-first, smallest-first and random baselines; needs at least 10 test labels). Added `rb dataset --out` and `rb evaluate` to `cli.py`. Added `tests/test_evaluate.py`. Added snapshot datasets `data/fastapi_typer.csv`, `data/encode_httpx.csv` and `data/httpie_cli.csv` (source commits listed in `README.md`). Updated `README.md`.
+- Why: Measures whether a ranking finds buggy commits better than simple baselines, and gives the phase 4 selector its train/test label counts. The CSV is inspectable proof of the data behind each number.
+- Validation: `uv run pytest -q` (52 passed; 12 new tests, including metrics checked against hand-worked examples and the no-peek split); `uv run ruff check .` and `uv run ruff format --check .` clean. Real runs (about 7-9 s each, labels cached): typer 270 code commits, 15/2 train/test labels, too few to evaluate; httpx 846, 40/18; httpie 720, 71/26. Bugs found in 20% effort, H0 / largest / smallest / random: httpx 6% / 6% / 44% / 20%, httpie 4% / 0% / 50% / 21%. Top-10 precision: httpx 40% / 50% / 0% / 7%, httpie 30% / 50% / 10% / 14%.
+- Limitations: H0 is worse than random order on the effort-aware measure because its size points favour large commits; its weights were deliberately not tuned on these results. The newest test commits have had less time for their bugs to be found, so test recall is a slight underestimate. Labels remain noisy.
+
 ## 2026-10-24T22:23:53+05:30 — Phase 2: bug labels and `rb labels`
 
 - Changed: Added `reviewbudget/labels.py`: revert labels (high confidence) and SZZ labels via PyDriller (medium confidence), with the phase 0 filters (bug-fix keywords in the subject only, non-bug fixes such as docs, typos and lint excluded, fixes touching more than 10 files skipped, only program code traced, suspects more than 2 years older than the fix dropped). Each label stores its evidence commits and the date that evidence appeared, for leak-free evaluation in phase 3. Results are cached in `~/.cache/reviewbudget/` keyed by repository path and HEAD. Added `load_history` and `head_sha` to `git_changes.py` and the `rb labels` command to `cli.py`. Added `tests/test_labels.py` and the shared `tests/gitfixture.py` helper. Updated `README.md`.
