@@ -15,19 +15,19 @@ Entry format:
 - Limitations: <known issues or "None identified in these checks">
 ```
 
-## 2026-10-24T22:09:08+05:30 — Phase 1: H0 ranker and `rb queue`
-
-- Changed: Added the `reviewbudget` package. `git_changes.py` reads the non-merge commits in a range with the git CLI (files, renames, added and removed lines). `h0.py` scores each commit from its diff alone, with a reason for every point and all weights in one `WEIGHTS` table. `cli.py` adds `rb queue --repo <path> (--range A..B | --last N)`. Registered the `rb` entry point and a hatchling build in `pyproject.toml`. Added `tests/test_h0.py`. Updated `README.md`.
-- Why: A working, explainable baseline that later phases (labels, evaluation, strategy selector) build on and are measured against.
-- Validation: `uv run pytest -q` (27 passed: 22 new tests on throwaway git repos, plus the 5 phase 0 tests); `uv run ruff check .` and `uv run ruff format --check .` clean. Ran `rb queue --last 30` on httpie/cli (about 1 s). That sanity run found two false signals, now fixed and covered by tests: `author`/`author_email` matched the security keywords, and `setup.py` counted as program code.
-- Limitations: Weights are hand-set and not yet validated against bug labels. Keyword risk signals are approximate. Mechanical multi-file changes (for example a project rename) can still rank high.
-
 ## 2026-10-24T22:15:32+05:30 — Move the event-guidance entry into the build log
 
 - Changed: Moved the 21:53 "Correct Devin Hack Kochi event guidance" entry (merged from PR #1) from above the file introduction into the build log, in newest-first order. Its text is unchanged.
 - Why: The merged entry sat outside the build log and out of time order.
 - Validation: Checked the entry order by eye; `git diff --check` clean.
 - Limitations: None identified in these checks.
+
+## 2026-10-24T22:09:08+05:30 — Phase 1: H0 ranker and `rb queue`
+
+- Changed: Added the `reviewbudget` package. `git_changes.py` reads the non-merge commits in a range with the git CLI (files, renames, added and removed lines). `h0.py` scores each commit from its diff alone, with a reason for every point and all weights in one `WEIGHTS` table. `cli.py` adds `rb queue --repo <path> (--range A..B | --last N)`. Registered the `rb` entry point and a hatchling build in `pyproject.toml`. Added `tests/test_h0.py`. Updated `README.md`.
+- Why: A working, explainable baseline that later phases (labels, evaluation, strategy selector) build on and are measured against.
+- Validation: `uv run pytest -q` (27 passed: 22 new tests on throwaway git repos, plus the 5 phase 0 tests); `uv run ruff check .` and `uv run ruff format --check .` clean. Ran `rb queue --last 30` on httpie/cli (about 1 s). That sanity run found two false signals, now fixed and covered by tests: `author`/`author_email` matched the security keywords, and `setup.py` counted as program code.
+- Limitations: Weights are hand-set and not yet validated against bug labels. Keyword risk signals are approximate. Mechanical multi-file changes (for example a project rename) can still rank high.
 
 ## 2026-10-24T21:53:05+05:30 — Correct Devin Hack Kochi event guidance
 
