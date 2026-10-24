@@ -54,6 +54,10 @@ def by_h0(rows: list[Row]) -> list[Row]:
     return sorted(rows, key=lambda r: (-r.h0_score, -r.timestamp, r.sha))
 
 
+def by_h1(rows: list[Row]) -> list[Row]:
+    return sorted(rows, key=lambda r: (-r.h1_score, -r.h1_risk, -r.timestamp, r.sha))
+
+
 def largest_first(rows: list[Row]) -> list[Row]:
     return sorted(rows, key=lambda r: (-r.code_lines, -r.timestamp, r.sha))
 
@@ -64,6 +68,7 @@ def smallest_first(rows: list[Row]) -> list[Row]:
 
 STRATEGIES = {
     "H0 (change-only heuristic)": by_h0,
+    "H1 (history-aware, per line)": by_h1,
     "largest first": largest_first,
     "smallest first": smallest_first,
 }
@@ -84,14 +89,14 @@ def random_baseline(
     )
 
 
-def evaluate(dataset: Dataset) -> list[Result] | None:
-    """Results for each strategy on the test window, or None if it has too few labels."""
-    test = dataset.test
-    if count_buggy(test) < max(1, MIN_TEST_LABELS):
+def evaluate(dataset: Dataset, window: str = "test") -> list[Result] | None:
+    """Results for each strategy on one window, or None if it has too few labels."""
+    rows = dataset.test if window == "test" else dataset.train
+    if count_buggy(rows) < max(1, MIN_TEST_LABELS):
         return None
     results = []
     for name, order in STRATEGIES.items():
-        ranked = order(test)
+        ranked = order(rows)
         results.append(Result(name, recall_at_effort(ranked), precision_at_k(ranked)))
-    results.append(random_baseline(test))
+    results.append(random_baseline(rows))
     return results

@@ -70,6 +70,7 @@ RISK_PATTERNS = {
 class Reason:
     points: float
     text: str
+    key: str = ""  # "size" marks the size points, which H1 leaves out
 
 
 @dataclass
@@ -102,6 +103,15 @@ def file_kind(path: str) -> str:
     if p.suffix.lower() in DOC_EXTENSIONS or dirs & {"docs", "doc"}:
         return "docs"
     return "other"
+
+
+def code_lines(commit: CommitChange) -> int:
+    """Lines added plus deleted in production code: the effort to review a commit."""
+    return sum(
+        f.added + f.deleted
+        for f in commit.files
+        if file_kind(f.path) == "code" and not f.binary
+    )
 
 
 def _normalise(lines: list[str]) -> list[str]:
@@ -149,7 +159,7 @@ def score_commit(commit: CommitChange) -> ScoredCommit:
     reasons = []
     lines = sum(f.added + f.deleted for f in changed)
     size = min(w["size_cap"], w["size_per_log2_line"] * math.log2(1 + lines))
-    reasons.append(Reason(round(size, 2), f"{lines} lines of code changed"))
+    reasons.append(Reason(round(size, 2), f"{lines} lines of code changed", "size"))
 
     if len(changed) > 1:
         points = min(w["extra_file_cap"], w["extra_file"] * (len(changed) - 1))

@@ -1,4 +1,4 @@
-"""The evaluation dataset: one row per code commit with its H0 score and bug label.
+"""The evaluation dataset: one row per code commit with its scores and bug label.
 
 Rows are split by time: the older TRAIN_SHARE of code commits are for training and
 the rest for testing. A training row only counts as buggy if its bug evidence appeared
@@ -12,9 +12,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from reviewbudget import h1
 from reviewbudget.git_changes import CommitChange, load_commits
-from reviewbudget.h0 import ScoredCommit, file_kind, score_commit
-from reviewbudget.labels import Label, load_labels
+from reviewbudget.h0 import ScoredCommit, code_lines, file_kind, score_commit
+from reviewbudget.history import compute_history
+from reviewbudget.labels import Label, LabelSet, load_labels
 
 TRAIN_SHARE = 0.7
 CSV_COLUMNS = [
@@ -31,6 +33,12 @@ CSV_COLUMNS = [
     "label_confidence",
     "evidence_date",
     "evidence",
+    "h1_risk",
+    "h1_score",
+    "h1_reasons",
+    "file_changes_before",
+    "file_bugs_before",
+    "author_commits_before",
 ]
 
 
@@ -51,6 +59,12 @@ class Row:
     hidden_from_training: int = (
         0  # 1 if a training row's bug was only found after the split
     )
+    h1_risk: float = 0.0
+    h1_score: float = 0.0  # H1 risk per 100 changed code lines
+    h1_reasons: str = ""
+    file_changes_before: int = 0
+    file_bugs_before: int = 0
+    author_commits_before: int = 0
 
 
 @dataclass
@@ -82,14 +96,6 @@ def is_code_commit(commit: CommitChange) -> bool:
     return any(file_kind(f.path) == "code" for f in commit.files)
 
 
-def code_lines(commit: CommitChange) -> int:
-    return sum(
-        f.added + f.deleted
-        for f in commit.files
-        if file_kind(f.path) == "code" and not f.binary
-    )
-
-
 def make_rows(
     scored: list[ScoredCommit],
     labels: dict[str, Label],
@@ -99,10 +105,13 @@ def make_rows(
     code = [s for s in scored if is_code_commit(s.commit)]
     n_train = int(len(code) * train_share)
     split_time = code[n_train].commit.timestamp if n_train < len(code) else None
+    history = compute_history([s.commit for s in scored], labels)
     rows = []
     for i, s in enumerate(code):
         c = s.commit
         label = labels.get(c.sha)
+        past = history[c.sha]
+        h1_scored = h1.score_commit(c, past, s)
         window = "train" if i < n_train else "test"
         hidden = (
             window == "train"
@@ -125,6 +134,12 @@ def make_rows(
                 evidence_found_at=label.found_at if label else None,
                 evidence=" ".join(label.evidence) if label else "",
                 hidden_from_training=int(hidden),
+                h1_risk=h1_scored.risk,
+                h1_score=h1_scored.score,
+                h1_reasons="; ".join(r.text for r in h1_scored.reasons[:3]),
+                file_changes_before=past.file_changes,
+                file_bugs_before=past.file_bugs,
+                author_commits_before=past.author_commits,
             )
         )
     return rows, split_time
@@ -134,7 +149,11 @@ def build_dataset(
     repo: Path, cache_dir: Path | None = None, use_cache: bool = True
 ) -> Dataset:
     label_set, _ = load_labels(repo, cache_dir, use_cache)
-    commits = load_commits(repo, [label_set.head])
+    return dataset_from_commits(load_commits(repo, [label_set.head]), label_set)
+
+
+def dataset_from_commits(commits: list[CommitChange], label_set: LabelSet) -> Dataset:
+    """Dataset from commits given oldest first, with labels computed at label_set.head."""
     rows, split_time = make_rows([score_commit(c) for c in commits], label_set.labels)
     return Dataset(label_set.head, split_time, rows)
 
@@ -159,5 +178,11 @@ def write_csv(dataset: Dataset, path: Path) -> None:
                     r.label_confidence,
                     iso_date(r.evidence_found_at),
                     r.evidence,
+                    r.h1_risk,
+                    r.h1_score,
+                    r.h1_reasons,
+                    r.file_changes_before,
+                    r.file_bugs_before,
+                    r.author_commits_before,
                 ]
             )

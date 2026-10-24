@@ -8,29 +8,46 @@ import time
 from pathlib import Path
 
 from reviewbudget import evaluate as ev
+from reviewbudget import h1
 from reviewbudget.dataset import (
     Dataset,
     build_dataset,
     count_buggy,
+    dataset_from_commits,
     iso_date,
     write_csv,
 )
-from reviewbudget.git_changes import GitError, load_commits
-from reviewbudget.h0 import ScoredCommit, rank, score_commit
+from reviewbudget.git_changes import GitError, git, load_commits
+from reviewbudget.h0 import rank, score_commit
+from reviewbudget.history import compute_history
 from reviewbudget.labels import LabelSet, load_labels
+from reviewbudget.selector import Choice, select
 
 SUBJECT_WIDTH = 40
 SHOWN_REASONS = 3
+H0_NAME = "H0 (change-only heuristic)"
+H1_NAME = "H1 (history-aware, per line)"
+H0_NOTE = (
+    "Scores are review priorities estimated from the diff alone, not bug predictions."
+)
+H1_NOTE = (
+    "Scores are risk points per 100 changed code lines, from the diff and the "
+    "repository's history: review priorities, not bug predictions."
+)
 
 
 def _shorten(text: str, width: int) -> str:
     return text if len(text) <= width else text[: width - 1] + "…"
 
 
-def format_queue(ranked: list[ScoredCommit], title: str) -> str:
+def format_queue(
+    ranked: list, title: str, note: str = H0_NOTE, details: list[str] | None = None
+) -> str:
+    """Ranked commits as a table; works for H0 and H1 scores."""
     lines = [
         title,
-        "Scores are review priorities estimated from the diff alone, not bug predictions.",
+        *(details or []),
+        note,
         "",
         f"{'#':>3}  {'commit':8}  {'score':>5}  {'size':>11}  {'subject':{SUBJECT_WIDTH}}  why",
     ]
@@ -92,8 +109,27 @@ def _split_summary(dataset: Dataset) -> list[str]:
     ]
 
 
+def _results_table(results: list[ev.Result]) -> list[str]:
+    effort_header = f"bugs found in {ev.EFFORT_SHARE:.0%} effort"
+    top_header = f"precision, top {ev.TOP_K}"
+    lines = [f"{'strategy':28}  {effort_header:>24}  {top_header:>17}"]
+    for r in results:
+        lines.append(
+            f"{r.name:28}  {r.recall_at_effort:>24.0%}  {r.precision_at_k:>17.0%}"
+        )
+    return lines
+
+
+def format_choice(choice: Choice) -> list[str]:
+    return ["Strategy selection:", *(f"  - {reason}" for reason in choice.reasons)]
+
+
 def format_evaluation(
-    dataset: Dataset, results: list[ev.Result] | None, title: str
+    dataset: Dataset,
+    results: list[ev.Result] | None,
+    title: str,
+    train_results: list[ev.Result] | None = None,
+    choice: Choice | None = None,
 ) -> str:
     lines = [title, *_split_summary(dataset)]
     lines.append(
@@ -108,18 +144,20 @@ def format_evaluation(
                 f"need at least {ev.MIN_TEST_LABELS})."
             ),
         ]
-        return "\n".join(lines)
-    effort_header = f"bugs found in {ev.EFFORT_SHARE:.0%} effort"
-    top_header = f"precision, top {ev.TOP_K}"
-    lines += ["", f"{'strategy':28}  {effort_header:>24}  {top_header:>17}"]
-    for r in results:
+    else:
+        lines += ["", *_results_table(results)]
         lines.append(
-            f"{r.name:28}  {r.recall_at_effort:>24.0%}  {r.precision_at_k:>17.0%}"
+            f"Bugs found in {ev.EFFORT_SHARE:.0%} effort: review in ranked order and "
+            f"stop at {ev.EFFORT_SHARE:.0%} of the window's changed code lines."
         )
-    lines.append(
-        f"Bugs found in {ev.EFFORT_SHARE:.0%} effort: review in ranked order and stop at "
-        f"{ev.EFFORT_SHARE:.0%} of the test window's changed code lines."
-    )
+    if train_results is not None:
+        lines += [
+            "",
+            "Same strategies on the older (training) commits, for comparison:",
+            *_results_table(train_results),
+        ]
+    if choice is not None:
+        lines += ["", *format_choice(choice)]
     return "\n".join(lines)
 
 
@@ -130,16 +168,49 @@ def _queue(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         parser.error("--range must look like A..B")
     if args.rev_range:
         revisions, label = [args.rev_range], args.rev_range
+        tip = args.rev_range.rsplit("..", 1)[-1] or "HEAD"
     else:
         revisions, label = ["-n", str(args.last), "HEAD"], f"last {args.last} on HEAD"
+        tip = "HEAD"
 
-    commits = load_commits(args.repo, revisions)
+    if args.strategy == "h0":
+        commits = load_commits(args.repo, revisions)
+        if not commits:
+            print(f"No non-merge commits in {label}.")
+            return 0
+        ranked = rank([score_commit(c) for c in commits])
+        print(
+            format_queue(
+                ranked, f"Strategy {H0_NAME} · {len(ranked)} commits · {label}"
+            )
+        )
+        return 0
+
+    # H1 and the selector need the whole history up to the range, and the bug labels.
+    history_commits = load_commits(args.repo, [tip])
+    wanted = set(
+        git(args.repo, "log", "--no-merges", "--format=%H", *revisions, "--").split()
+    )
+    commits = [c for c in history_commits if c.sha in wanted]
     if not commits:
         print(f"No non-merge commits in {label}.")
         return 0
-    ranked = rank([score_commit(c) for c in commits])
-    title = f"Strategy H0 (change-only heuristic) · {len(ranked)} commits · {label}"
-    print(format_queue(ranked, title))
+    label_set, _ = load_labels(args.repo, use_cache=not args.no_cache)
+    details = []
+    use_h1 = args.strategy == "h1"
+    if args.strategy == "auto":
+        choice = select(dataset_from_commits(history_commits, label_set))
+        use_h1 = choice.strategy == "H1"
+        details = format_choice(choice)
+    if use_h1:
+        history = compute_history(history_commits, label_set.labels)
+        ranked = h1.rank([h1.score_commit(c, history[c.sha]) for c in commits])
+        name, note = H1_NAME, H1_NOTE
+    else:
+        ranked = rank([score_commit(c) for c in commits])
+        name, note = H0_NAME, H0_NOTE
+    title = f"Strategy {name} · {len(ranked)} commits · {label}"
+    print(format_queue(ranked, title, note, details))
     return 0
 
 
@@ -173,7 +244,15 @@ def _evaluate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         print("No commits that change program code; nothing to evaluate.")
         return 0
     title = f"Evaluation for {args.repo} at {dataset.head[:8]}"
-    print(format_evaluation(dataset, ev.evaluate(dataset), title))
+    print(
+        format_evaluation(
+            dataset,
+            ev.evaluate(dataset),
+            title,
+            train_results=ev.evaluate(dataset, "train"),
+            choice=select(dataset),
+        )
+    )
     return 0
 
 
@@ -192,11 +271,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     commands = parser.add_subparsers(dest="command", required=True)
 
-    queue = commands.add_parser(
-        "queue", help="print a ranked review queue (H0 heuristic)"
-    )
+    queue = commands.add_parser("queue", help="print a ranked review queue")
+    _add_repo_options(queue)
     queue.add_argument(
-        "--repo", type=Path, default=Path("."), help="local git repository"
+        "--strategy",
+        choices=["auto", "h0", "h1"],
+        default="auto",
+        help="auto picks H0 or H1 from the repository's bug evidence (default)",
     )
     selection = queue.add_mutually_exclusive_group(required=True)
     selection.add_argument(
@@ -224,7 +305,7 @@ def main(argv: list[str] | None = None) -> int:
     dataset.set_defaults(handler=_dataset, parser=dataset)
 
     evaluate = commands.add_parser(
-        "evaluate", help="score H0 and baselines on newer commits"
+        "evaluate", help="score H0, H1 and baselines on newer commits"
     )
     _add_repo_options(evaluate)
     evaluate.set_defaults(handler=_evaluate, parser=evaluate)
