@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 FIELD_SEP = "\x1f"
+RECORD_SEP = "\x1e"
 
 
 class GitError(RuntimeError):
@@ -53,6 +54,15 @@ class CommitChange:
     @property
     def deleted(self) -> int:
         return sum(f.deleted for f in self.files)
+
+
+@dataclass
+class HistoryCommit:
+    sha: str
+    timestamp: int
+    subject: str
+    body: str
+    files: list[str]
 
 
 def git(repo: Path, *args: str) -> str:
@@ -105,13 +115,7 @@ def parse_diff(diff: str) -> list[FileChange]:
 
 def load_commits(repo: Path, revisions: list[str]) -> list[CommitChange]:
     """Return the non-merge commits selected by `revisions`, oldest first."""
-    if not repo.is_dir():
-        raise GitError(f"not a directory: {repo}")
-    try:
-        git(repo, "rev-parse", "--git-dir")
-    except GitError:
-        raise GitError(f"not a git repository: {repo}") from None
-
+    _require_repo(repo)
     log = git(
         repo,
         "log",
@@ -139,4 +143,45 @@ def load_commits(repo: Path, revisions: list[str]) -> list[CommitChange]:
             sha,
         )
         commits.append(CommitChange(sha, author, int(ts), subject, parse_diff(diff)))
+    return commits
+
+
+def _require_repo(repo: Path) -> None:
+    if not repo.is_dir():
+        raise GitError(f"not a directory: {repo}")
+    try:
+        git(repo, "rev-parse", "--git-dir")
+    except GitError:
+        raise GitError(f"not a git repository: {repo}") from None
+
+
+def head_sha(repo: Path) -> str:
+    _require_repo(repo)
+    try:
+        return git(repo, "rev-parse", "--verify", "HEAD").strip()
+    except GitError:
+        raise GitError(f"repository has no commits: {repo}") from None
+
+
+def load_history(repo: Path, rev: str = "HEAD") -> list[HistoryCommit]:
+    """Every non-merge commit reachable from `rev`, oldest first, with the paths it touched."""
+    _require_repo(repo)
+    fmt = f"{RECORD_SEP}%H{FIELD_SEP}%at{FIELD_SEP}%s{FIELD_SEP}%b{FIELD_SEP}"
+    log = git(
+        repo,
+        "log",
+        "--no-merges",
+        "--reverse",
+        f"--format={fmt}",
+        "--name-only",
+        rev,
+        "--",
+    )
+    commits = []
+    for record in log.split(RECORD_SEP):
+        if not record.strip():
+            continue
+        sha, ts, subject, body, rest = record.split(FIELD_SEP, 4)
+        files = [line for line in rest.splitlines() if line.strip()]
+        commits.append(HistoryCommit(sha, int(ts), subject, body, files))
     return commits

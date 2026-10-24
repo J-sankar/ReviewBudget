@@ -15,6 +15,13 @@ Entry format:
 - Limitations: <known issues or "None identified in these checks">
 ```
 
+## 2026-10-24T22:23:53+05:30 — Phase 2: bug labels and `rb labels`
+
+- Changed: Added `reviewbudget/labels.py`: revert labels (high confidence) and SZZ labels via PyDriller (medium confidence), with the phase 0 filters (bug-fix keywords in the subject only, non-bug fixes such as docs, typos and lint excluded, fixes touching more than 10 files skipped, only program code traced, suspects more than 2 years older than the fix dropped). Each label stores its evidence commits and the date that evidence appeared, for leak-free evaluation in phase 3. Results are cached in `~/.cache/reviewbudget/` keyed by repository path and HEAD. Added `load_history` and `head_sha` to `git_changes.py` and the `rb labels` command to `cli.py`. Added `tests/test_labels.py` and the shared `tests/gitfixture.py` helper. Updated `README.md`.
+- Why: Phase 3 needs labels to evaluate the ranking against, and the phase 4 selector needs to know how much trustworthy evidence a repository has.
+- Validation: `uv run pytest -q` (40 passed; 13 new tests on a throwaway repository with exactly one revert and one SZZ pair, plus decoys for each filter); `uv run ruff check .` and `uv run ruff format --check .` clean. Full httpie/cli history: 4 revert and 98 SZZ labels (phase 0: 4 and 97), 720 code commits (phase 0: 710), computed in 2.0 s; the second run came from the cache. The small differences come from using the ranker's multi-language code-file rules instead of the spike's Python-only rules.
+- Limitations: Labels are noisy evidence, not ground truth; the httpie sample still includes test-related fixes. Fix detection relies on English keywords in commit subjects.
+
 ## 2026-10-24T22:15:32+05:30 — Move the event-guidance entry into the build log
 
 - Changed: Moved the 21:53 "Correct Devin Hack Kochi event guidance" entry (merged from PR #1) from above the file introduction into the build log, in newest-first order. Its text is unchanged.

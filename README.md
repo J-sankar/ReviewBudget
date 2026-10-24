@@ -25,14 +25,15 @@ This template has no application code or required technology stack. The document
 - **Project name:** ReviewBudget
 - **Short description:** A developer tool that learns from a Git repository's history to show which changes most deserve human review in the time a reviewer has. It chooses its features, ranking strategy and (only when justified) a lightweight learned model from the quality of the available evidence, not from repository size. Full plan: [docs/BRIEF.md](docs/BRIEF.md).
 - **Team:** Jayasankar ([@J-sankar](https://github.com/J-sankar)), solo.
-- **Working demo:** in progress. `rb queue` (H0 heuristic ranking) works; the strategy selector, evaluation and time budget are not built yet.
+- **Working demo:** in progress. `rb queue` (H0 heuristic ranking) and `rb labels` (bug labels from history) work; the strategy selector, evaluation and time budget are not built yet.
 - **Technology stack:** Python, Git CLI, PyDriller; scikit-learn only if the learned ranker is adopted (planned).
 
-Implemented CLI (phase 1):
+Implemented CLI (phases 1 and 2):
 
 ```text
 rb queue --repo <path> --range A..B     # rank the non-merge commits in a range
 rb queue --repo <path> --last N         # rank the last N commits on HEAD
+rb labels --repo <path> [--sample N] [--no-cache]   # bug labels found in the history
 ```
 
 Planned CLI (not implemented yet):
@@ -54,6 +55,10 @@ rb queue   --repo . --range main..feature --budget 30m [--export plan.md]
    uv run rb queue --repo <path-to-repo> --range main..feature
    ```
    Each row shows the score and its top three reasons.
+   Show the bug labels found in the full history (cached in `~/.cache/reviewbudget/`, or `$XDG_CACHE_HOME/reviewbudget/`):
+   ```bash
+   uv run rb labels --repo <path-to-repo> --sample 10
+   ```
 5. Run the phase 0 spike on a local clone:
    ```bash
    uv run python spikes/phase0_feasibility.py <path-to-clone> --years 100 --out result.json
@@ -68,8 +73,8 @@ rb queue   --repo . --range main..feature --budget 30m [--export plan.md]
 
 ### Current status
 
-- Working features: phase 0 (feasibility check, see [docs/phase0.md](docs/phase0.md)); phase 1 `rb queue` with the H0 change-only heuristic. H0 scores each commit from its diff alone: code size (log scale, capped), files and folders touched, error-handling / security / concurrency keywords in changed lines, and whether tests changed. Docs-only, test-only, pure-rename and whitespace-only changes score near zero. Commit messages are never used for scoring.
-- Known limitations: H0 weights are hand-set and not yet validated against bug labels (phase 3). The risk signals are keyword matches, so they can fire on unrelated words or miss real risk. Mechanical changes spread across many files (for example a project rename) can still rank high. History signals, the strategy selector and the time budget are not built yet.
+- Working features: phase 0 (feasibility check, see [docs/phase0.md](docs/phase0.md)); phase 1 `rb queue` with the H0 change-only heuristic. H0 scores each commit from its diff alone: code size (log scale, capped), files and folders touched, error-handling / security / concurrency keywords in changed lines, and whether tests changed. Docs-only, test-only, pure-rename and whitespace-only changes score near zero. Commit messages are never used for scoring. Phase 2 `rb labels` finds bug labels in the full history: reverted commits (high confidence) and SZZ suspects traced back from bug-fix commits (medium confidence), with the phase 0 noise filters. Each label records its evidence and the date that evidence appeared.
+- Known limitations: Bug-fix commits are found by keywords in the commit subject, and SZZ labels are noisy (about 50-65% looked plausible in the phase 0 hand check), so labels are evidence, not ground truth. H0 weights are hand-set and not yet validated against bug labels (phase 3). The risk signals are keyword matches, so they can fire on unrelated words or miss real risk. Mechanical changes spread across many files (for example a project rename) can still rank high. History signals, the strategy selector and the time budget are not built yet.
 - Libraries, APIs, and public datasets used: [PyDriller](https://github.com/ishepard/pydriller) (Apache-2.0) for Git history and SZZ; [pytest](https://pytest.org) and [ruff](https://docs.astral.sh/ruff/) for checks. Phase 0 analysed public GitHub repositories listed in [docs/phase0.md](docs/phase0.md).
 
 See [AI_USAGE.md](AI_USAGE.md) for AI assistance and [CHANGELOG.md](CHANGELOG.md) for the development record.
