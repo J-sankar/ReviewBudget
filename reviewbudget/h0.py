@@ -141,19 +141,28 @@ def score_commit(commit: CommitChange) -> ScoredCommit:
     if not changed:
         if code:
             return _scored(
-                commit, [Reason(w["rename_only"], "only renames code files")]
+                commit,
+                [Reason(w["rename_only"], "only renames code files", "low_value")],
             )
         if all(kind in ("docs", "test") for kind in kinds.values()):
             return _scored(
-                commit, [Reason(w["docs_or_tests_only"], "docs or tests only")]
+                commit,
+                [Reason(w["docs_or_tests_only"], "docs or tests only", "low_value")],
             )
         return _scored(
             commit,
-            [Reason(w["non_code_only"], "non-code files only (config, build, data)")],
+            [
+                Reason(
+                    w["non_code_only"],
+                    "non-code files only (config, build, data)",
+                    "low_value",
+                )
+            ],
         )
     if _is_whitespace_only(changed):
         return _scored(
-            commit, [Reason(w["whitespace_only"], "whitespace-only code change")]
+            commit,
+            [Reason(w["whitespace_only"], "whitespace-only code change", "low_value")],
         )
 
     reasons = []

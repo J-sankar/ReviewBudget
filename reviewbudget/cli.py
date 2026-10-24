@@ -10,6 +10,13 @@ from pathlib import Path
 
 from reviewbudget import evaluate as ev
 from reviewbudget import h1, model, smallest
+from reviewbudget.budget import (
+    DEFAULT_SPEED,
+    format_plan,
+    make_plan,
+    parse_budget,
+    plan_markdown,
+)
 from reviewbudget.dataset import (
     Dataset,
     build_dataset,
@@ -188,6 +195,16 @@ def _queue(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
         parser.error("--last must be at least 1")
     if args.rev_range is not None and ".." not in args.rev_range:
         parser.error("--range must look like A..B")
+    minutes = None
+    if args.budget is not None:
+        try:
+            minutes = parse_budget(args.budget)
+        except ValueError as exc:
+            parser.error(str(exc))
+    if args.export is not None and minutes is None:
+        parser.error("--export needs --budget")
+    if args.speed < 1:
+        parser.error("--speed must be at least 1 line an hour")
     if args.rev_range:
         revisions, label = [args.rev_range], args.rev_range
         tip = args.rev_range.rsplit("..", 1)[-1] or "HEAD"
@@ -202,8 +219,7 @@ def _queue(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
             return 0
         name, note, ranked = _diff_only_ranking(args.strategy.upper(), commits)
         title = f"Strategy {name} · {len(ranked)} commits · {label}"
-        print(format_queue(ranked, title, note))
-        return 0
+        return _show(args, ranked, title, note, [], minutes)
 
     # H1 and the selector need the whole history up to the range, and the bug labels.
     history_commits = load_commits(args.repo, [tip])
@@ -241,7 +257,32 @@ def _queue(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     else:
         name, note, ranked = _diff_only_ranking(strategy, commits)
     title = f"Strategy {name} · {len(ranked)} commits · {label}"
-    print(format_queue(ranked, title, note, details))
+    return _show(args, ranked, title, note, details, minutes)
+
+
+def _show(
+    args: argparse.Namespace,
+    ranked: list,
+    title: str,
+    note: str,
+    details: list[str],
+    minutes: int | None,
+) -> int:
+    """Print the queue, or the budgeted plan (and its Markdown export) when asked."""
+    if minutes is None:
+        print(format_queue(ranked, title, note, details))
+        return 0
+    plan = make_plan(ranked, minutes, args.speed)
+    print(format_plan(plan, title, note, details))
+    if args.export is not None:
+        try:
+            args.export.write_text(
+                plan_markdown(plan, title, note, details), encoding="utf-8"
+            )
+        except OSError as exc:
+            print(f"rb: cannot write {args.export}: {exc.strerror}", file=sys.stderr)
+            return 1
+        print(f"\nWrote the plan to {args.export}")
     return 0
 
 
@@ -320,6 +361,21 @@ def main(argv: list[str] | None = None) -> int:
         choices=["auto", "h0", "s", "h1", "l"],
         default="auto",
         help="auto picks H0, S, H1 or L from the repository's bug evidence (default)",
+    )
+    queue.add_argument(
+        "--budget", metavar="TIME", help="review time, such as 15m, 1h or 1h30m"
+    )
+    queue.add_argument(
+        "--speed",
+        type=int,
+        default=DEFAULT_SPEED,
+        help=f"lines of code reviewed per hour (default {DEFAULT_SPEED})",
+    )
+    queue.add_argument(
+        "--export",
+        type=Path,
+        metavar="FILE",
+        help="also write the plan as Markdown (needs --budget)",
     )
     selection = queue.add_mutually_exclusive_group(required=True)
     selection.add_argument(
