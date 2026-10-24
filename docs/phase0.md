@@ -9,6 +9,7 @@ pip install pydriller==2.12
 python spikes/phase0_feasibility.py <path-to-clone> --years 100 --out result.json   # full history
 python spikes/phase0_feasibility.py <path-to-clone> --years 3                      # last 3 years
 python spikes/phase0_feasibility.py <path-to-clone> --years 100 --sample 10       # labels to hand-check
+python spikes/phase0_table.py <dir-of-result-json>                               # Markdown table + draft tier
 python -m pytest -q tests
 ```
 

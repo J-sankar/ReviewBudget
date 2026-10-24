@@ -15,6 +15,13 @@ Entry format:
 - Limitations: <known issues or "None identified in these checks">
 ```
 
+## 2026-10-24T21:40:18+05:30 — Phase 0 results table script
+
+- Changed: Added `spikes/phase0_table.py`, which turns a directory of spike JSON results into the Markdown table in `docs/phase0.md` and applies the draft selector thresholds to show each repository's tier. Added it to the reproduce steps in `docs/phase0.md`.
+- Why: Make the phase 0 tables and tier assignments reproducible from the cached results.
+- Validation: Ran it on the full-history and 3-year results for the 12 repositories; rows and tiers match `docs/phase0.md`. `pyflakes` reported no issues.
+- Limitations: Research helper, not product code. Cloning and running the spike per repository is still manual.
+
 ## 2026-10-24T21:30:33+05:30 — Phase 0 feasibility check
 
 - Changed: Added `spikes/phase0_feasibility.py` (throwaway research script: history profile, revert and SZZ labels via PyDriller, train/test label counts, timing), `tests/test_phase0_spike.py`, and `docs/phase0.md` with results for 12 Python repositories, a hand check of 20 SZZ labels, the demo repositories and draft selector thresholds.
