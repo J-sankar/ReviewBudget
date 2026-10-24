@@ -36,6 +36,14 @@ rb evaluate --repo <path>                           # score H0, H1, L and baseli
    uv run rb queue --repo <path-to-repo> --last 30 --strategy s    # smallest code changes first
    uv run rb queue --repo <path-to-repo> --last 30 --budget 15m --export plan.md   # time-budgeted plan
    ```
+   ReviewBudget reads committed Git history. To review a local fix, commit it first,
+   then pass the base commit and the new `HEAD` as a range:
+   ```bash
+   git -C <path-to-repo> diff --check
+   git -C <path-to-repo> add <changed-files>
+   git -C <path-to-repo> commit -m "fix: describe the change"
+   uv run rb queue --repo <path-to-repo> --range <base-commit>..HEAD --strategy h0
+   ```
    Each row shows the score and its top three reasons. By default (`--strategy auto`) the selector reads the full history and bug labels first and explains which strategy it chose (about 7-9 s on a 1,700-commit repository). With `--budget`, it lists the commits that fit in that time, the reason every other commit was skipped, and H0's five riskiest changes with whether each fits; `--export` writes the same plan as Markdown.
    Show the bug labels found in the full history (cached in `~/.cache/reviewbudget/`, or `$XDG_CACHE_HOME/reviewbudget/`):
    ```bash

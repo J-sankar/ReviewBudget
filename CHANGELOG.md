@@ -15,6 +15,13 @@ Entry format:
 - Limitations: <known issues or "None identified in these checks">
 ```
 
+## 2026-10-25T02:29:42+05:30 — Document targeted review workflow
+
+- Changed: Added the committed-fix workflow and base-to-`HEAD` range example to `README.md`.
+- Why: Make it clear that ReviewBudget analyzes committed Git history when reviewing a local change.
+- Validation: Checked documentation links and ran the repository test and lint checks.
+- Limitations: None identified in these checks.
+
 ## 2026-10-25T01:09:48+05:30 — Align README with completed project
 
 - Changed: Replaced the remaining hackathon-template introduction in `README.md` with a ReviewBudget project introduction and corrected the project overview to describe the completed demo.
