@@ -6,9 +6,10 @@ from pathlib import Path
 
 import streamlit as st
 
-from reviewbudget import h0
-from reviewbudget.budget import DEFAULT_SPEED, format_plan, make_plan, parse_budget
-from reviewbudget.pr import has_tracked_changes, load_local_pr
+from reviewbudget.analysis import analyze_local_pr
+from reviewbudget.budget import DEFAULT_SPEED, format_plan, parse_budget
+from reviewbudget.pr import load_local_pr
+from reviewbudget.selector import gather_evidence
 
 
 def main() -> None:
@@ -47,11 +48,10 @@ def main() -> None:
         st.error(str(exc))
         return
 
-    changes = list(local_pr.commits)
-    if has_tracked_changes(local_pr.working_tree):
-        changes.append(local_pr.working_tree)
-    ranked = h0.rank([h0.score_commit(change) for change in changes])
-    plan = make_plan(ranked, budget, int(speed))
+    result = analyze_local_pr(local_pr, budget, int(speed))
+    changes = [item.commit for item in result.ranked]
+    ranked = result.ranked
+    plan = result.plan
     st.success(f"Analyzed PR #{local_pr.pull_request.number} from the local checkout.")
 
     columns = st.columns(4)
@@ -63,6 +63,30 @@ def main() -> None:
     )
     st.write(f"Base: `{local_pr.base_ref}` at `{local_pr.base_sha[:8]}`")
     st.write(f"Remote: `{local_pr.remote}`")
+    worktree_present = any(item.commit.sha == "WORKTREE" for item in ranked)
+    strategy_note = f"{result.strategy} for committed PR items"
+    if worktree_present:
+        strategy_note += "; H0 for the uncommitted WORKTREE item"
+    st.write(
+        f"Strategy: **{strategy_note}** · {len(result.dataset.train)} "
+        f"training commits · {len(result.dataset.test)} test commits · "
+        f"{result.labels.positive_rate:.0%} labelled"
+    )
+
+    evidence = gather_evidence(result.dataset)
+    st.subheader("Evidence profile")
+    evidence_columns = st.columns(5)
+    evidence_columns[0].metric("Older labels", evidence.train_labels)
+    evidence_columns[1].metric("Newer labels", evidence.test_labels)
+    evidence_columns[2].metric("File coverage", f"{evidence.file_coverage:.0%}")
+    evidence_columns[3].metric("Author coverage", f"{evidence.author_coverage:.0%}")
+    evidence_columns[4].metric(
+        "Model eligible", "Yes" if evidence.model_eligible else "No"
+    )
+
+    with st.expander("Why this strategy?"):
+        for reason in result.choice.reasons:
+            st.write(f"- {reason}")
 
     if not ranked:
         st.warning(
@@ -71,11 +95,72 @@ def main() -> None:
         return
 
     st.subheader("Review budget")
+    budget_columns = st.columns(4)
+    budget_columns[0].metric("Within budget", len(plan.included))
+    budget_columns[1].metric("Skipped", len(plan.skipped))
+    budget_columns[2].metric("Minutes used", f"{plan.used}/{plan.budget}")
+    budget_columns[3].metric("Minutes remaining", max(0, plan.budget - plan.used))
     st.code(
         format_plan(
-            plan, "Local PR review", "H0 scores review priority from the diff only.", []
+            plan,
+            "Local PR review",
+            f"{strategy_note} scores review priority from local repository evidence.",
+            [
+                "Strategy selection:",
+                *(f"  - {reason}" for reason in result.choice.reasons),
+            ],
         )
     )
+
+    if plan.included:
+        st.caption("Items included in the review plan")
+        st.dataframe(
+            [
+                {
+                    "rank": entry.rank,
+                    "commit": entry.item.commit.sha[:8],
+                    "minutes": entry.minutes,
+                    "subject": entry.item.commit.subject,
+                }
+                for entry in plan.included
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+    if plan.skipped:
+        st.caption("Items skipped from the review plan")
+        st.dataframe(
+            [
+                {
+                    "rank": entry.rank,
+                    "commit": entry.item.commit.sha[:8],
+                    "minutes": entry.minutes,
+                    "subject": entry.item.commit.subject,
+                    "reason": entry.reason,
+                }
+                for entry in plan.skipped
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    with st.expander("Top H0 risk signals"):
+        st.dataframe(
+            [
+                {
+                    "commit": risky.scored.commit.sha[:8],
+                    "risk": risky.scored.score,
+                    "subject": risky.scored.commit.subject,
+                    "status": risky.status,
+                    "reasons": "; ".join(
+                        reason.text for reason in risky.scored.reasons[:3]
+                    ),
+                }
+                for risky in plan.riskiest
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
 
     st.subheader("Review items")
     st.dataframe(
@@ -93,6 +178,13 @@ def main() -> None:
         use_container_width=True,
         hide_index=True,
     )
+
+    with st.expander("Detailed reasons"):
+        for item in ranked:
+            label = f"{item.commit.sha[:8]} · {item.commit.subject}"
+            st.markdown(f"**{label}**")
+            for reason in item.reasons:
+                st.write(f"- {reason.text} ({reason.points:g} points)")
 
     st.subheader("Changed files by review item")
     st.dataframe(

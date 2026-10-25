@@ -31,6 +31,19 @@ Run the local PR dashboard:
 uv run streamlit run reviewbudget/ui.py
 ```
 
+### Dashboard preview
+
+![ReviewBudget local PR dashboard](docs/reviewbudget-dashboard.png)
+
+The dashboard shows the selected strategy, repository evidence, review budget,
+ranked commits, skipped work, risk signals, and changed files. The screenshot uses
+the local FiloJ checkout as a reproducible example.
+
+![ReviewBudget scoring details](docs/reviewbudget-details.png)
+
+The detail view expands the strategy rationale and per-commit scoring reasons so a
+reviewer can see why each change received its priority.
+
 The dashboard asks for a GitHub PR URL, a local checkout, a local base ref such
 as `main`, and a review budget. It validates the checkout's configured GitHub
 remote, analyzes committed changes in `base..HEAD`, and adds current tracked
@@ -155,8 +168,9 @@ The current repository passes with 116 tests. The latest implementation commit i
 - The history-aware and learned strategies do not consistently beat smallest-first
    on newer commits.
 - Keyword signals can miss relevant changes or match unrelated text.
-- The dashboard uses H0 for local PR items, excludes untracked files, and has no
-   GitHub App or PR-comment integration.
+- The dashboard uses the evidence-selected strategy for committed PR items and H0
+   for the synthetic `WORKTREE` item, excludes untracked files, and has no GitHub
+   App or PR-comment integration.
 - Review speed is a configurable guideline, not a measured reviewer-specific rate.
 
 ## Project documentation
