@@ -135,19 +135,33 @@ def score_commit(commit: CommitChange) -> ScoredCommit:
     w = WEIGHTS
     kinds = {f.path: file_kind(f.path) for f in commit.files}
     code = [f for f in commit.files if kinds[f.path] == "code" and not f.binary]
-    changed = [f for f in code if not f.is_pure_rename]
-    tests_changed = any(kind == "test" for kind in kinds.values())
+    content = [f for f in commit.files if not f.binary and (f.added or f.deleted)]
+    changed = [f for f in content if kinds[f.path] == "code" and not f.is_pure_rename]
+    tests_changed = any(
+        kinds[f.path] == "test" and (f.added or f.deleted) for f in commit.files
+    )
 
     if not changed:
+        if content:
+            if all(kinds[f.path] in ("docs", "test") for f in content):
+                return _scored(
+                    commit,
+                    [Reason(w["docs_or_tests_only"], "docs or tests only", "low_value")],
+                )
+            return _scored(
+                commit,
+                [
+                    Reason(
+                        w["non_code_only"],
+                        "non-code files only (config, build, data)",
+                        "low_value",
+                    )
+                ],
+            )
         if code:
             return _scored(
                 commit,
                 [Reason(w["rename_only"], "only renames code files", "low_value")],
-            )
-        if all(kind in ("docs", "test") for kind in kinds.values()):
-            return _scored(
-                commit,
-                [Reason(w["docs_or_tests_only"], "docs or tests only", "low_value")],
             )
         return _scored(
             commit,

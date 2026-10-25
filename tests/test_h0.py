@@ -135,6 +135,19 @@ def test_whitespace_only_change_scores_near_zero(repo):
     assert scored.reasons[0].text == "whitespace-only code change"
 
 
+def test_mode_only_paths_do_not_hide_config_changes():
+    mode_only = FileChange(path="pkg/module.py")
+    config = FileChange(
+        path="nginx/nginx.conf",
+        added_lines=["add_header Access-Control-Allow-Origin * always;"],
+    )
+    scored = score_commit(
+        CommitChange("c" * 40, "t@example.com", 0, "cors", [mode_only, config])
+    )
+    assert scored.reasons[0].text == "non-code files only (config, build, data)"
+    assert all(reason.text != "whitespace-only code change" for reason in scored.reasons)
+
+
 def test_same_change_scores_lower_with_a_test_change():
     code = FileChange(path="pkg/mod.py", added_lines=["x = compute()", "y = x + 1"])
     test = FileChange(path="tests/test_mod.py", added_lines=["assert y == 2"])
